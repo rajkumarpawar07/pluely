@@ -291,7 +291,9 @@ export async function* fetchAIResponse(params: {
       }
     }
 
-    const fetchFunction = url?.includes("http") ? fetch : tauriFetch;
+    // Always use tauriFetch (Tauri HTTP plugin) — native browser fetch is blocked
+    // by the WebView CSP on Windows/Linux for cross-origin API requests.
+    const fetchFunction = tauriFetch;
 
     let response;
     try {

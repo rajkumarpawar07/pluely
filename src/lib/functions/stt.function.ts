@@ -147,11 +147,34 @@ export async function fetchSTT(params: STTParams): Promise<string> {
     const isForm =
       provider.curl.includes("-F ") || provider.curl.includes("--form");
     if (isForm) {
+      // Detect the audio field name from the raw curl template.
+      // e.g. `-F "file={{AUDIO}}"` → "file", `-F "audio={{AUDIO}}"` → "audio"
+      const rawCurlForm = curlJson.form || {};
+      let audioFieldName = "file"; // default (OpenAI, Groq, ElevenLabs...)
+      for (const [k, v] of Object.entries(rawCurlForm)) {
+        const strVal = String(v);
+        if (!isNaN(parseInt(k, 10))) {
+          // Numeric key style: "audio={{AUDIO}}" or "file={{AUDIO}}"
+          const [formKey, ...rest] = strVal.split("=");
+          const formVal = rest.join("=");
+          if (formVal.includes("AUDIO") || formVal.trim() === "") {
+            audioFieldName = formKey.toLowerCase().trim();
+            break;
+          }
+        } else {
+          // Named key style: { audio: "{{AUDIO}}" }
+          if (strVal.includes("AUDIO") || strVal.trim() === "") {
+            audioFieldName = k.toLowerCase().trim();
+            break;
+          }
+        }
+      }
+
       const form = new FormData();
       const freshBlob = new Blob([await audio.arrayBuffer()], {
         type: audio.type,
       });
-      form.append("file", freshBlob, "audio.wav");
+      form.append(audioFieldName, freshBlob, "audio.wav");
       const headerKeys = Object.keys(headers).map((k) =>
         k.toUpperCase().replace(/[-_]/g, "")
       );
@@ -173,7 +196,9 @@ export async function fetchSTT(params: STTParams): Promise<string> {
           const [formKey, ...formValueParts] = val.split("=");
           const formValue = formValueParts.join("=");
 
-          if (formKey.toLowerCase() === "file") continue; // Already handled by form.append('file', audio)
+          // Skip the audio field — already appended above with detected name
+          if (formKey.toLowerCase() === audioFieldName) continue;
+          if (formKey.toLowerCase() === "file") continue;
 
           if (
             !formValue ||
@@ -183,7 +208,9 @@ export async function fetchSTT(params: STTParams): Promise<string> {
 
           form.append(formKey, formValue);
         } else {
-          if (key.toLowerCase() === "file") continue; // Already handled by form.append('file', audio)
+          // Skip the audio field — already appended above with detected name
+          if (key.toLowerCase() === audioFieldName) continue;
+          if (key.toLowerCase() === "file") continue;
           if (
             !val ||
             headerKeys.includes(key.toUpperCase()) ||

@@ -5,8 +5,7 @@ export const SPEECH_TO_TEXT_PROVIDERS = [
     curl: `curl -X POST "https://sync.assemblyai.com/transcribe" \\
       -H "Authorization: {{API_KEY}}" \\
       -H "X-AAI-Model: {{MODEL}}" \\
-      -H "Content-Type: audio/wav" \\
-      --data-binary {{AUDIO}}`,
+      -F "audio={{AUDIO}}"`,
     responseContentPath: "text",
     streaming: false,
   },

@@ -119,6 +119,20 @@ export const AI_PROVIDERS = [
     streaming: true,
   },
   {
+    id: "nvidia-nim",
+    curl: `curl -X POST https://integrate.api.nvidia.com/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer {{API_KEY}}" \\
+  -d '{
+    "model": "{{MODEL}}",
+    "messages": [{"role": "system", "content": "{{SYSTEM_PROMPT}}"}, {"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}],
+    "max_tokens": 1024,
+    "stream": true
+  }'`,
+    responseContentPath: "choices[0].message.content",
+    streaming: true,
+  },
+  {
     id: "ollama",
     curl: `curl -X POST http://localhost:11434/v1/chat/completions \\
     -H "Authorization: Bearer {{API_KEY}}" \\

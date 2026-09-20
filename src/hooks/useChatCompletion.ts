@@ -53,6 +53,7 @@ export const useChatCompletion = (
 ) => {
   const {
     selectedAIProvider,
+    aiPriorityConfig,
     allAiProviders,
     systemPrompt,
     screenshotConfiguration,
@@ -176,7 +177,10 @@ export const useChatCompletion = (
 
         const usePluelyAPI = await shouldUsePluelyAPI();
         // Check if AI provider is configured
-        if (!selectedAIProvider.provider && !usePluelyAPI) {
+        const hasConfiguredProvider =
+          selectedAIProvider.provider ||
+          aiPriorityConfig?.slots?.some((s) => s.enabled && s.provider);
+        if (!hasConfiguredProvider && !usePluelyAPI) {
           setState((prev) => ({
             ...prev,
             error: "Please select an AI provider in settings",
@@ -187,13 +191,6 @@ export const useChatCompletion = (
         const provider = allAiProviders.find(
           (p) => p.id === selectedAIProvider.provider
         );
-        if (!provider && !usePluelyAPI) {
-          setState((prev) => ({
-            ...prev,
-            error: "Invalid provider selected",
-          }));
-          return;
-        }
 
         // Add user message to UI immediately
         const timestamp = Date.now();
@@ -204,13 +201,22 @@ export const useChatCompletion = (
           timestamp,
         };
 
-        const updatedMessages = {
-          ...messages!,
-          messages: [...(messages?.messages || []), userMsg],
-        };
+        const updatedMessages: ChatConversation = messages
+          ? {
+              ...messages,
+              messages: [...messages.messages, userMsg],
+            }
+          : {
+              id: conversationId,
+              title: input.slice(0, 30) + (input.length > 30 ? "..." : ""),
+              messages: [userMsg],
+              createdAt: timestamp,
+              updatedAt: timestamp,
+            };
+
         setMessages(updatedMessages);
 
-        // Clear input and set loading state
+        // Set loading state
         setState((prev) => ({
           ...prev,
           input: "",
@@ -225,10 +231,12 @@ export const useChatCompletion = (
         let fullResponse = "";
 
         try {
-          // Use the fetchAIResponse function with signal
+          // Use the fetchAIResponse function with priority fallback and signal
           for await (const chunk of fetchAIResponse({
             provider: usePluelyAPI ? undefined : provider,
             selectedProvider: selectedAIProvider,
+            priorityConfig: aiPriorityConfig,
+            allAiProviders,
             systemPrompt: systemPrompt || undefined,
             history: messageHistory,
             userMessage: input,

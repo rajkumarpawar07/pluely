@@ -55,6 +55,7 @@ interface CompletionState {
 export const useCompletion = () => {
   const {
     selectedAIProvider,
+    aiPriorityConfig,
     allAiProviders,
     systemPrompt,
     screenshotConfiguration,
@@ -181,7 +182,10 @@ export const useCompletion = () => {
 
         const usePluelyAPI = await shouldUsePluelyAPI();
         // Check if AI provider is configured
-        if (!selectedAIProvider.provider && !usePluelyAPI) {
+        const hasConfiguredProvider =
+          selectedAIProvider.provider ||
+          aiPriorityConfig?.slots?.some((s) => s.enabled && s.provider);
+        if (!hasConfiguredProvider && !usePluelyAPI) {
           setState((prev) => ({
             ...prev,
             error: "Please select an AI provider in settings",
@@ -192,13 +196,6 @@ export const useCompletion = () => {
         const provider = allAiProviders.find(
           (p) => p.id === selectedAIProvider.provider
         );
-        if (!provider && !usePluelyAPI) {
-          setState((prev) => ({
-            ...prev,
-            error: "Invalid provider selected",
-          }));
-          return;
-        }
 
         // Clear previous response and set loading state
         setState((prev) => ({
@@ -209,10 +206,12 @@ export const useCompletion = () => {
         }));
 
         try {
-          // Use the fetchAIResponse function with signal
+          // Use the fetchAIResponse function with priority fallback and signal
           for await (const chunk of fetchAIResponse({
             provider: usePluelyAPI ? undefined : provider,
             selectedProvider: selectedAIProvider,
+            priorityConfig: aiPriorityConfig,
+            allAiProviders,
             systemPrompt: systemPrompt || undefined,
             history: messageHistory,
             userMessage: input,
@@ -584,7 +583,10 @@ export const useCompletion = () => {
 
             const usePluelyAPI = await shouldUsePluelyAPI();
             // Check if AI provider is configured
-            if (!selectedAIProvider.provider && !usePluelyAPI) {
+            const hasConfiguredProvider =
+              selectedAIProvider.provider ||
+              aiPriorityConfig?.slots?.some((s) => s.enabled && s.provider);
+            if (!hasConfiguredProvider && !usePluelyAPI) {
               setState((prev) => ({
                 ...prev,
                 error: "Please select an AI provider in settings",
@@ -595,13 +597,6 @@ export const useCompletion = () => {
             const provider = allAiProviders.find(
               (p) => p.id === selectedAIProvider.provider
             );
-            if (!provider && !usePluelyAPI) {
-              setState((prev) => ({
-                ...prev,
-                error: "Invalid provider selected",
-              }));
-              return;
-            }
 
             // Clear previous response and set loading state
             setState((prev) => ({
@@ -612,10 +607,12 @@ export const useCompletion = () => {
               response: "",
             }));
 
-            // Use the fetchAIResponse function with image and signal
+            // Use the fetchAIResponse function with priority fallback, image and signal
             for await (const chunk of fetchAIResponse({
               provider: usePluelyAPI ? undefined : provider,
               selectedProvider: selectedAIProvider,
+              priorityConfig: aiPriorityConfig,
+              allAiProviders,
               systemPrompt: systemPrompt || undefined,
               history: messageHistory,
               userMessage: prompt,

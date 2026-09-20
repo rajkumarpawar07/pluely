@@ -1,5 +1,10 @@
 import { Dispatch, SetStateAction } from "react";
-import { ScreenshotConfig, TYPE_PROVIDER } from "@/types";
+import {
+  AIPriorityConfig,
+  AIProviderPrioritySlot,
+  ScreenshotConfig,
+  TYPE_PROVIDER,
+} from "@/types";
 import { CursorType, CustomizableState } from "@/lib/storage";
 
 export type IContextType = {
@@ -18,6 +23,12 @@ export type IContextType = {
     provider: string;
     variables: Record<string, string>;
   }) => void;
+  aiPriorityConfig: AIPriorityConfig;
+  onSetAIPriorityConfig: (config: AIPriorityConfig) => void;
+  onSetPrioritySlot: (
+    index: number,
+    slot: Partial<AIProviderPrioritySlot>
+  ) => void;
   allSttProviders: TYPE_PROVIDER[];
   customSttProviders: TYPE_PROVIDER[];
   selectedSttProvider: {

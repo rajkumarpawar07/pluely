@@ -202,6 +202,7 @@ export function useSystemAudio() {
     selectedSttProvider,
     allSttProviders,
     selectedAIProvider,
+    aiPriorityConfig,
     allAiProviders,
     systemPrompt,
     selectedAudioDevices,
@@ -735,7 +736,10 @@ export function useSystemAudio() {
         let fullResponse = "";
 
         const usePluelyAPI = await shouldUsePluelyAPI();
-        if (!selectedAIProvider.provider && !usePluelyAPI) {
+        const hasConfiguredProvider =
+          selectedAIProvider.provider ||
+          aiPriorityConfig?.slots?.some((s) => s.enabled && s.provider);
+        if (!hasConfiguredProvider && !usePluelyAPI) {
           setError("No AI provider selected.");
           return;
         }
@@ -743,15 +747,13 @@ export function useSystemAudio() {
         const provider = allAiProviders.find(
           (p) => p.id === selectedAIProvider.provider
         );
-        if (!provider && !usePluelyAPI) {
-          setError("AI provider config not found.");
-          return;
-        }
 
         try {
           for await (const chunk of fetchAIResponse({
             provider: usePluelyAPI ? undefined : provider,
             selectedProvider: selectedAIProvider,
+            priorityConfig: aiPriorityConfig,
+            allAiProviders,
             systemPrompt: prompt,
             history: previousMessages,
             userMessage: transcription,

@@ -1,4 +1,8 @@
-import { TYPE_PROVIDER } from "./provider.type";
+import {
+  AIPriorityConfig,
+  AIProviderPrioritySlot,
+  TYPE_PROVIDER,
+} from "./provider.type";
 import { ScreenshotConfig, ScreenshotMode } from "./settings";
 
 export interface UseSettingsReturn {
@@ -12,6 +16,12 @@ export interface UseSettingsReturn {
   allAiProviders: TYPE_PROVIDER[];
   allSttProviders: TYPE_PROVIDER[];
   selectedAIProvider: { provider: string; variables: Record<string, string> };
+  aiPriorityConfig: AIPriorityConfig;
+  onSetAIPriorityConfig: (config: AIPriorityConfig) => void;
+  onSetPrioritySlot: (
+    index: number,
+    slot: Partial<AIProviderPrioritySlot>
+  ) => void;
   selectedSttProvider: {
     provider: string;
     variables: Record<string, string>;

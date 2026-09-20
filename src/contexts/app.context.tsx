@@ -19,7 +19,22 @@ import {
   CursorType,
   updateCursorType,
 } from "@/lib/storage";
-import { IContextType, ScreenshotConfig, TYPE_PROVIDER } from "@/types";
+import {
+  AIPriorityConfig,
+  AIProviderPrioritySlot,
+  IContextType,
+  ScreenshotConfig,
+  TYPE_PROVIDER,
+} from "@/types";
+
+const DEFAULT_AI_PRIORITY_CONFIG: AIPriorityConfig = {
+  strategy: "fallback",
+  slots: [
+    { provider: "", variables: {}, enabled: true },
+    { provider: "", variables: {}, enabled: false },
+    { provider: "", variables: {}, enabled: false },
+  ],
+};
 import curl2Json from "@bany/curl-to-json";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -109,6 +124,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     provider: "",
     variables: {},
   });
+  const [aiPriorityConfig, setAiPriorityConfig] =
+    useState<AIPriorityConfig>(DEFAULT_AI_PRIORITY_CONFIG);
 
   // STT Providers
   const [customSttProviders, setCustomSttProviders] = useState<TYPE_PROVIDER[]>(
@@ -238,12 +255,57 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
     setCustomSttProviders(sttList);
 
-    // Load selected AI provider
+    // Load selected AI provider & AI priority configuration
     const savedSelectedAi = safeLocalStorage.getItem(
       STORAGE_KEYS.SELECTED_AI_PROVIDER
     );
     if (savedSelectedAi) {
-      setSelectedAIProvider(JSON.parse(savedSelectedAi));
+      try {
+        setSelectedAIProvider(JSON.parse(savedSelectedAi));
+      } catch {}
+    }
+
+    const savedPriorities = safeLocalStorage.getItem(
+      STORAGE_KEYS.AI_PROVIDER_PRIORITIES
+    );
+    if (savedPriorities) {
+      try {
+        const parsed = JSON.parse(savedPriorities);
+        if (parsed && Array.isArray(parsed.slots)) {
+          setAiPriorityConfig(parsed);
+          if (parsed.slots[0]?.provider) {
+            setSelectedAIProvider({
+              provider: parsed.slots[0].provider,
+              variables: parsed.slots[0].variables || {},
+            });
+          }
+        }
+      } catch {
+        console.warn("Failed to parse AI priority configuration");
+      }
+    } else if (savedSelectedAi) {
+      try {
+        const parsedSelected = JSON.parse(savedSelectedAi);
+        if (parsedSelected?.provider) {
+          const initialConfig: AIPriorityConfig = {
+            strategy: "fallback",
+            slots: [
+              {
+                provider: parsedSelected.provider,
+                variables: parsedSelected.variables || {},
+                enabled: true,
+              },
+              { provider: "", variables: {}, enabled: false },
+              { provider: "", variables: {}, enabled: false },
+            ],
+          };
+          setAiPriorityConfig(initialConfig);
+          safeLocalStorage.setItem(
+            STORAGE_KEYS.AI_PROVIDER_PRIORITIES,
+            JSON.stringify(initialConfig)
+          );
+        }
+      } catch {}
     }
 
     // Load selected STT provider
@@ -534,6 +596,84 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     ...customSttProviders,
   ];
 
+  const onSetAIPriorityConfig = (config: AIPriorityConfig) => {
+    setAiPriorityConfig(config);
+    safeLocalStorage.setItem(
+      STORAGE_KEYS.AI_PROVIDER_PRIORITIES,
+      JSON.stringify(config)
+    );
+    if (config.slots[0]) {
+      const slot0 = config.slots[0];
+      setSelectedAIProvider({
+        provider: slot0.provider,
+        variables: slot0.variables || {},
+      });
+      safeLocalStorage.setItem(
+        STORAGE_KEYS.SELECTED_AI_PROVIDER,
+        JSON.stringify({
+          provider: slot0.provider,
+          variables: slot0.variables || {},
+        })
+      );
+      if (!pluelyApiEnabled) {
+        const selectedProvider = allAiProviders.find(
+          (p) => p.id === slot0.provider
+        );
+        setSupportsImages(selectedProvider?.curl?.includes("{{IMAGE}}") ?? true);
+      }
+    }
+  };
+
+  const onSetPrioritySlot = (
+    index: number,
+    slotUpdates: Partial<AIProviderPrioritySlot>
+  ) => {
+    if (index < 0 || index > 2) return;
+    setAiPriorityConfig((prev) => {
+      const newSlots = [...prev.slots] as [
+        AIProviderPrioritySlot,
+        AIProviderPrioritySlot,
+        AIProviderPrioritySlot
+      ];
+      newSlots[index] = {
+        ...newSlots[index],
+        ...slotUpdates,
+      };
+      const newConfig: AIPriorityConfig = {
+        ...prev,
+        slots: newSlots,
+      };
+      safeLocalStorage.setItem(
+        STORAGE_KEYS.AI_PROVIDER_PRIORITIES,
+        JSON.stringify(newConfig)
+      );
+
+      if (index === 0) {
+        setSelectedAIProvider({
+          provider: newSlots[0].provider,
+          variables: newSlots[0].variables || {},
+        });
+        safeLocalStorage.setItem(
+          STORAGE_KEYS.SELECTED_AI_PROVIDER,
+          JSON.stringify({
+            provider: newSlots[0].provider,
+            variables: newSlots[0].variables || {},
+          })
+        );
+        if (!pluelyApiEnabled) {
+          const selectedProvider = allAiProviders.find(
+            (p) => p.id === newSlots[0].provider
+          );
+          setSupportsImages(
+            selectedProvider?.curl?.includes("{{IMAGE}}") ?? true
+          );
+        }
+      }
+
+      return newConfig;
+    });
+  };
+
   const onSetSelectedAIProvider = ({
     provider,
     variables,
@@ -558,11 +698,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
     }
 
-    setSelectedAIProvider((prev) => ({
-      ...prev,
+    setSelectedAIProvider({
       provider,
       variables,
-    }));
+    });
+    safeLocalStorage.setItem(
+      STORAGE_KEYS.SELECTED_AI_PROVIDER,
+      JSON.stringify({ provider, variables })
+    );
+
+    onSetPrioritySlot(0, { provider, variables, enabled: true });
   };
 
   // Setter for selected STT with validation
@@ -696,6 +841,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     customAiProviders,
     selectedAIProvider,
     onSetSelectedAIProvider,
+    aiPriorityConfig,
+    onSetAIPriorityConfig,
+    onSetPrioritySlot,
     allSttProviders,
     customSttProviders,
     selectedSttProvider,

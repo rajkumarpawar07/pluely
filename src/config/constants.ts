@@ -9,6 +9,7 @@ export const STORAGE_KEYS = {
   CUSTOM_AI_PROVIDERS: "curl_custom_ai_providers",
   CUSTOM_SPEECH_PROVIDERS: "curl_custom_speech_providers",
   SELECTED_AI_PROVIDER: "curl_selected_ai_provider",
+  AI_PROVIDER_PRIORITIES: "curl_ai_provider_priorities",
   SELECTED_STT_PROVIDER: "curl_selected_stt_provider",
   SYSTEM_AUDIO_CONTEXT: "system_audio_context",
   SYSTEM_AUDIO_QUICK_ACTIONS: "system_audio_quick_actions",

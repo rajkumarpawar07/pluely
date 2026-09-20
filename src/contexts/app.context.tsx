@@ -31,8 +31,8 @@ const DEFAULT_AI_PRIORITY_CONFIG: AIPriorityConfig = {
   strategy: "fallback",
   slots: [
     { provider: "", variables: {}, enabled: true },
-    { provider: "", variables: {}, enabled: false },
-    { provider: "", variables: {}, enabled: false },
+    { provider: "", variables: {}, enabled: true },
+    { provider: "", variables: {}, enabled: true },
   ],
 };
 import curl2Json from "@bany/curl-to-json";
@@ -272,11 +272,36 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       try {
         const parsed = JSON.parse(savedPriorities);
         if (parsed && Array.isArray(parsed.slots)) {
-          setAiPriorityConfig(parsed);
-          if (parsed.slots[0]?.provider) {
+          // Auto-heal any slots that have a provider configured so they are enabled: true
+          const healedSlots = parsed.slots.map(
+            (s: AIProviderPrioritySlot, idx: number) => {
+              const hasProvider = Boolean(
+                s && s.provider && s.provider.trim() !== ""
+              );
+              return {
+                ...s,
+                enabled:
+                  idx === 0 ? true : hasProvider ? true : (s?.enabled ?? true),
+              };
+            }
+          );
+          const healedConfig: AIPriorityConfig = {
+            strategy: parsed.strategy || "fallback",
+            slots: healedSlots as [
+              AIProviderPrioritySlot,
+              AIProviderPrioritySlot,
+              AIProviderPrioritySlot
+            ],
+          };
+          setAiPriorityConfig(healedConfig);
+          safeLocalStorage.setItem(
+            STORAGE_KEYS.AI_PROVIDER_PRIORITIES,
+            JSON.stringify(healedConfig)
+          );
+          if (healedConfig.slots[0]?.provider) {
             setSelectedAIProvider({
-              provider: parsed.slots[0].provider,
-              variables: parsed.slots[0].variables || {},
+              provider: healedConfig.slots[0].provider,
+              variables: healedConfig.slots[0].variables || {},
             });
           }
         }
@@ -295,8 +320,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 variables: parsedSelected.variables || {},
                 enabled: true,
               },
-              { provider: "", variables: {}, enabled: false },
-              { provider: "", variables: {}, enabled: false },
+              { provider: "", variables: {}, enabled: true },
+              { provider: "", variables: {}, enabled: true },
             ],
           };
           setAiPriorityConfig(initialConfig);

@@ -41,3 +41,20 @@ export const DEFAULT_QUICK_ACTIONS = [
   "Follow-up questions",
   "Recap",
 ];
+
+// Default recommended models for known AI providers
+export const DEFAULT_PROVIDER_MODELS: Record<string, string> = {
+  groq: "llama-3.3-70b-versatile",
+  openrouter: "openai/gpt-4o-mini",
+  gemini: "gemini-1.5-flash",
+  "nvidia-nim": "meta/llama-3.1-70b-instruct",
+  openai: "gpt-4o-mini",
+  claude: "claude-3-5-haiku-20241022",
+  mistral: "mistral-small-latest",
+  deepseek: "deepseek-chat",
+  perplexity: "sonar",
+  grok: "grok-beta",
+  opencode: "llama-3.3-70b-versatile",
+  ollama: "llama3.2",
+};
+

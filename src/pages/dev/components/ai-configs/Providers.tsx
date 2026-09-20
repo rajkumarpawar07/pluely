@@ -1,5 +1,6 @@
 import { Button, Header, Input, Selection, TextInput } from "@/components";
 import { Badge, Switch } from "@/components/ui";
+import { DEFAULT_PROVIDER_MODELS } from "@/config/constants";
 import { AIProviderPrioritySlot, AIPriorityConfig, UseSettingsReturn } from "@/types";
 import curl2Json, { ResultJSON } from "@bany/curl-to-json";
 import { extractVariables, getProviderCooldown, clearProviderCooldown } from "@/lib";
@@ -26,15 +27,15 @@ export const Providers = ({
         variables: selectedAIProvider?.variables || {},
         enabled: true,
       },
-      { provider: "", variables: {}, enabled: false },
-      { provider: "", variables: {}, enabled: false },
+      { provider: "", variables: {}, enabled: true },
+      { provider: "", variables: {}, enabled: true },
     ],
   };
 
   const currentSlot: AIProviderPrioritySlot = config.slots[activeSlotIdx] || {
     provider: "",
     variables: {},
-    enabled: activeSlotIdx === 0,
+    enabled: true,
   };
 
   const currentProvider = allAiProviders?.find(
@@ -73,7 +74,10 @@ export const Providers = ({
   };
 
   const handleUpdateSlotVariables = (updatedVars: Record<string, string>) => {
-    onSetPrioritySlot(activeSlotIdx, { variables: updatedVars });
+    onSetPrioritySlot(activeSlotIdx, {
+      variables: updatedVars,
+      enabled: true,
+    });
     if (activeSlotIdx === 0) {
       onSetSelectedAIProvider({
         provider: currentSlot.provider,
@@ -83,15 +87,23 @@ export const Providers = ({
   };
 
   const handleProviderSelect = (newProviderId: string) => {
+    const defaultModel = DEFAULT_PROVIDER_MODELS[newProviderId] || "";
+    const newVars: Record<string, string> = {
+      ...(currentSlot.variables || {}),
+    };
+    if (defaultModel && !newVars.model) {
+      newVars.model = defaultModel;
+    }
+
     onSetPrioritySlot(activeSlotIdx, {
       provider: newProviderId,
-      variables: {},
-      enabled: activeSlotIdx === 0 ? true : currentSlot.enabled,
+      variables: newVars,
+      enabled: true,
     });
     if (activeSlotIdx === 0) {
       onSetSelectedAIProvider({
         provider: newProviderId,
-        variables: {},
+        variables: newVars,
       });
     }
   };
@@ -160,8 +172,12 @@ export const Providers = ({
             (p) => p.id === slot?.provider
           );
           const hasProvider = Boolean(slot?.provider);
-          const isEnabled = idx === 0 || Boolean(slot?.enabled);
+          const isEnabled = idx === 0 || (hasProvider && slot?.enabled !== false);
           const cooldown = slot?.provider ? getProviderCooldown(slot.provider) : 0;
+          const configuredModel =
+            slot?.variables?.model ||
+            (slot?.provider ? DEFAULT_PROVIDER_MODELS[slot.provider] : "") ||
+            "";
 
           return (
             <button
@@ -194,10 +210,10 @@ export const Providers = ({
                 >
                   {idx === 0
                     ? "Primary"
+                    : !hasProvider
+                    ? "Unset"
                     : isEnabled
-                    ? hasProvider
-                      ? "Active"
-                      : "Enabled"
+                    ? "Active Fallback"
                     : "Disabled"}
                 </Badge>
               </div>
@@ -209,6 +225,12 @@ export const Providers = ({
                     : slotProvider?.id || slot?.provider
                   : "Not configured"}
               </div>
+
+              {hasProvider && configuredModel && (
+                <div className="text-[11px] text-muted-foreground truncate w-full mt-0.5 font-mono">
+                  {configuredModel}
+                </div>
+              )}
 
               {cooldown > 0 && (
                 <div className="text-[11px] text-amber-500 font-medium flex items-center gap-1 mt-1">
@@ -251,10 +273,10 @@ export const Providers = ({
           {activeSlotIdx > 0 && (
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium text-muted-foreground">
-                {currentSlot.enabled ? "Enabled" : "Disabled"}
+                {currentSlot.enabled !== false ? "Active" : "Disabled"}
               </span>
               <Switch
-                checked={currentSlot.enabled}
+                checked={currentSlot.enabled !== false}
                 onCheckedChange={(checked) => {
                   onSetPrioritySlot(activeSlotIdx, { enabled: checked });
                 }}

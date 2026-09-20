@@ -47,7 +47,7 @@ export const AI_PROVIDERS = [
   -d '{
     "model": "{{MODEL}}",
     "messages": [{"role": "system", "content": "{{SYSTEM_PROMPT}}"}, {"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
-  }'}`,
+  }'`,
     responseContentPath: "choices[0].message.content",
     streaming: true,
   },
@@ -88,7 +88,6 @@ export const AI_PROVIDERS = [
       "max_completion_tokens": 8192,
       "top_p": 1,
       "stream": true,
-      "reasoning_effort": "medium",
       "stop": null
     }'`,
     responseContentPath: "choices[0].message.content",

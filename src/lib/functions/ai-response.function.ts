@@ -17,7 +17,10 @@ import curl2Json from "@bany/curl-to-json";
 import { shouldUsePluelyAPI } from "./pluely.api";
 import { CHUNK_POLL_INTERVAL_MS } from "../chat-constants";
 import { getResponseSettings, RESPONSE_LENGTHS, LANGUAGES } from "@/lib";
-import { MARKDOWN_FORMATTING_INSTRUCTIONS } from "@/config/constants";
+import {
+  MARKDOWN_FORMATTING_INSTRUCTIONS,
+  DEFAULT_PROVIDER_MODELS,
+} from "@/config/constants";
 
 // In-memory cooldown tracking for circuit breaker: providerId -> expiration timestamp (ms)
 const providerCooldowns = new Map<string, number>();
@@ -238,15 +241,31 @@ async function* executeSingleProvider(params: {
   const requiredVars = extractedVariables.filter(
     ({ key }) => key !== "SYSTEM_PROMPT" && key !== "TEXT" && key !== "IMAGE"
   );
+
+  const effectiveVariables = { ...(selectedProvider.variables || {}) };
+
+  // If model is missing or empty, auto-populate default model for this provider if known
+  const defaultModel = provider.id ? DEFAULT_PROVIDER_MODELS[provider.id] : "";
+  if (defaultModel) {
+    if (!effectiveVariables.model || effectiveVariables.model.trim() === "") {
+      effectiveVariables.model = defaultModel;
+    }
+    if (!effectiveVariables.MODEL || effectiveVariables.MODEL.trim() === "") {
+      effectiveVariables.MODEL = defaultModel;
+    }
+  }
+
   for (const { key } of requiredVars) {
-    if (
-      !selectedProvider.variables?.[key] ||
-      selectedProvider.variables[key].trim() === ""
-    ) {
+    const val =
+      effectiveVariables[key] ||
+      effectiveVariables[key.toLowerCase()] ||
+      effectiveVariables[key.toUpperCase()];
+    if (!val || val.trim() === "") {
       throw new Error(
         `Missing required variable: ${key}. Please configure it in settings.`
       );
     }
+    effectiveVariables[key] = val;
   }
 
   if (!userMessage) {
@@ -277,7 +296,7 @@ async function* executeSingleProvider(params: {
 
   const allVariables = {
     ...Object.fromEntries(
-      Object.entries(selectedProvider.variables).map(([key, value]) => [
+      Object.entries(effectiveVariables).map(([key, value]) => [
         key.toUpperCase(),
         value,
       ])
@@ -473,7 +492,15 @@ export async function* fetchAIResponse(
 
   if (priorityConfig && Array.isArray(priorityConfig.slots)) {
     priorityConfig.slots.forEach((slot, idx) => {
-      if (slot && slot.provider && (idx === 0 || slot.enabled)) {
+      const hasProvider = Boolean(
+        slot && slot.provider && slot.provider.trim() !== ""
+      );
+      // Eligible if provider is configured AND (slot 0 OR enabled !== false OR has API key configured)
+      const isEligible =
+        hasProvider &&
+        (idx === 0 || slot.enabled !== false || Boolean(slot.variables?.api_key));
+
+      if (isEligible) {
         slotsToTry.push({
           provider: slot.provider,
           variables: slot.variables || {},
@@ -565,6 +592,9 @@ export async function* fetchAIResponse(
       const firstResult = await iterator.next();
 
       if (firstResult.done) {
+        errors.push(
+          `Priority ${slot.priorityIndex + 1} (${slot.provider}): Provider returned empty response`
+        );
         continue;
       }
 

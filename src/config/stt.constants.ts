@@ -1,5 +1,16 @@
 export const SPEECH_TO_TEXT_PROVIDERS = [
   {
+    id: "assemblyai",
+    name: "AssemblyAI",
+    curl: `curl -X POST "https://sync.assemblyai.com/transcribe" \\
+      -H "Authorization: {{API_KEY}}" \\
+      -H "X-AAI-Model: {{MODEL}}" \\
+      -H "Content-Type: audio/wav" \\
+      --data-binary {{AUDIO}}`,
+    responseContentPath: "text",
+    streaming: false,
+  },
+  {
     id: "openrouter-stt",
     name: "OpenRouter (Whisper)",
     curl: `curl -X POST "https://openrouter.ai/api/v1/audio/transcriptions" \\

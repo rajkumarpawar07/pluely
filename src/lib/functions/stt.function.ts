@@ -207,7 +207,9 @@ export async function fetchSTT(params: STTParams): Promise<string> {
       body = JSON.stringify(deepVariableReplacer(dataObj, allVariables));
     }
 
-    const fetchFunction = url?.includes("http") ? fetch : tauriFetch;
+    // Always use tauriFetch (Tauri HTTP plugin) — native browser fetch is blocked
+    // by the WebView CSP on Windows/Linux for cross-origin STT API requests.
+    const fetchFunction = tauriFetch;
 
     // Send request
     let response: Response;

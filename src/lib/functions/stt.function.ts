@@ -147,80 +147,121 @@ export async function fetchSTT(params: STTParams): Promise<string> {
     const isForm =
       provider.curl.includes("-F ") || provider.curl.includes("--form");
     if (isForm) {
-      // Detect the audio field name from the raw curl template.
-      // e.g. `-F "file={{AUDIO}}"` → "file", `-F "audio={{AUDIO}}"` → "audio"
-      const rawCurlForm = curlJson.form || {};
-      let audioFieldName = "file"; // default (OpenAI, Groq, ElevenLabs...)
-      for (const [k, v] of Object.entries(rawCurlForm)) {
-        const strVal = String(v);
-        if (!isNaN(parseInt(k, 10))) {
-          // Numeric key style: "audio={{AUDIO}}" or "file={{AUDIO}}"
-          const [formKey, ...rest] = strVal.split("=");
-          const formVal = rest.join("=");
-          if (formVal.includes("AUDIO") || formVal.trim() === "") {
-            audioFieldName = formKey.toLowerCase().trim();
-            break;
-          }
-        } else {
-          // Named key style: { audio: "{{AUDIO}}" }
-          if (strVal.includes("AUDIO") || strVal.trim() === "") {
-            audioFieldName = k.toLowerCase().trim();
-            break;
-          }
+      // Helper to reliably parse form entries whether curl2Json produces a string, array, or object
+      const parseFormEntries = (form: any): { key: string; value: string }[] => {
+        if (!form) return [];
+        if (typeof form === "string") {
+          const trimmed = form.trim();
+          if (!trimmed) return [];
+          const eqIdx = trimmed.indexOf("=");
+          if (eqIdx === -1) return [{ key: trimmed, value: "" }];
+          return [
+            {
+              key: trimmed.slice(0, eqIdx).trim(),
+              value: trimmed.slice(eqIdx + 1).trim(),
+            },
+          ];
         }
+        if (Array.isArray(form)) {
+          const entries: { key: string; value: string }[] = [];
+          for (const item of form) {
+            if (typeof item === "string") {
+              const trimmed = item.trim();
+              if (!trimmed) continue;
+              const eqIdx = trimmed.indexOf("=");
+              if (eqIdx === -1) {
+                entries.push({ key: trimmed, value: "" });
+              } else {
+                entries.push({
+                  key: trimmed.slice(0, eqIdx).trim(),
+                  value: trimmed.slice(eqIdx + 1).trim(),
+                });
+              }
+            } else if (item && typeof item === "object") {
+              for (const [k, v] of Object.entries(item)) {
+                entries.push({ key: k.trim(), value: String(v).trim() });
+              }
+            }
+          }
+          return entries;
+        }
+        if (typeof form === "object") {
+          const entries: { key: string; value: string }[] = [];
+          for (const [k, v] of Object.entries(form)) {
+            if (!isNaN(parseInt(k, 10)) && typeof v === "string") {
+              const trimmed = v.trim();
+              const eqIdx = trimmed.indexOf("=");
+              if (eqIdx === -1) {
+                entries.push({ key: trimmed, value: "" });
+              } else {
+                entries.push({
+                  key: trimmed.slice(0, eqIdx).trim(),
+                  value: trimmed.slice(eqIdx + 1).trim(),
+                });
+              }
+            } else {
+              entries.push({ key: k.trim(), value: String(v).trim() });
+            }
+          }
+          return entries;
+        }
+        return [];
+      };
+
+      // 1. Detect audio field name from the raw curl form entries
+      // E.g. `-F "audio={{AUDIO}}"` -> "audio", `-F "file={{AUDIO}}"` -> "file"
+      const rawFormEntries = parseFormEntries(curlJson.form);
+      let audioFieldName = "file"; // fallback default
+      const detectedAudio = rawFormEntries.find(
+        (entry) =>
+          entry.value.toUpperCase().includes("AUDIO") ||
+          ["audio", "file", "data_file", "media"].includes(
+            entry.key.toLowerCase()
+          )
+      );
+      if (detectedAudio && detectedAudio.key) {
+        audioFieldName = detectedAudio.key;
       }
 
+      // 2. Append audio blob under detected field name
       const form = new FormData();
+      const mimeType = audio.type || "audio/wav";
+      const filename = (audio as File)?.name || "audio.wav";
       const freshBlob = new Blob([await audio.arrayBuffer()], {
-        type: audio.type,
+        type: mimeType,
       });
-      form.append(audioFieldName, freshBlob, "audio.wav");
+      form.append(audioFieldName, freshBlob, filename);
+
+      // 3. Append remaining form fields
       const headerKeys = Object.keys(headers).map((k) =>
         k.toUpperCase().replace(/[-_]/g, "")
       );
-
-      for (const [key, val] of Object.entries(formData)) {
-        if (typeof val !== "string") {
-          if (
-            !val ||
-            headerKeys.includes(key.toUpperCase()) ||
-            key.toUpperCase() === "AUDIO"
-          )
-            continue;
-          form.append(key.toLowerCase(), val as string | Blob);
+      const processedFormEntries = parseFormEntries(formData);
+      for (const entry of processedFormEntries) {
+        const lowerKey = entry.key.toLowerCase();
+        // Skip audio field since it was already appended
+        if (
+          lowerKey === audioFieldName.toLowerCase() ||
+          lowerKey === "file" ||
+          lowerKey === "audio" ||
+          lowerKey === "data_file" ||
+          lowerKey === "media"
+        ) {
           continue;
         }
 
-        // Check if key is a number, which indicates array-like parsing from curl2json
-        if (!isNaN(parseInt(key, 10))) {
-          const [formKey, ...formValueParts] = val.split("=");
-          const formValue = formValueParts.join("=");
-
-          // Skip the audio field — already appended above with detected name
-          if (formKey.toLowerCase() === audioFieldName) continue;
-          if (formKey.toLowerCase() === "file") continue;
-
-          if (
-            !formValue ||
-            headerKeys.includes(formKey.toUpperCase().replace(/[-_]/g, ""))
-          )
-            continue;
-
-          form.append(formKey, formValue);
-        } else {
-          // Skip the audio field — already appended above with detected name
-          if (key.toLowerCase() === audioFieldName) continue;
-          if (key.toLowerCase() === "file") continue;
-          if (
-            !val ||
-            headerKeys.includes(key.toUpperCase()) ||
-            key.toUpperCase() === "AUDIO"
-          )
-            continue;
-          form.append(key.toLowerCase(), val as string | Blob);
+        if (
+          !entry.value ||
+          headerKeys.includes(entry.key.toUpperCase().replace(/[-_]/g, ""))
+        ) {
+          continue;
         }
+
+        form.append(entry.key, entry.value);
       }
+
       delete finalHeaders["Content-Type"];
+      delete finalHeaders["content-type"];
       body = form;
     } else if (isBinaryUpload) {
       // Deepgram-style: raw binary body
@@ -262,6 +303,9 @@ export async function fetchSTT(params: STTParams): Promise<string> {
           errMsg = errObj.error.message;
         } else if (errObj?.message) {
           errMsg = errObj.message;
+        } else if (errObj?.detail || errObj?.details) {
+          const detailStr = errObj.detail || errObj.details;
+          errMsg = errObj.title ? `${errObj.title}: ${detailStr}` : detailStr;
         }
       } catch {
         errMsg = errText || response.statusText;

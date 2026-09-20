@@ -137,6 +137,9 @@ export const AI_PROVIDERS = [
     curl: `curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer {{API_KEY}}" \\
+  -H "User-Agent: opencode/1.1.0" \\
+  -H "x-opencode-client: cli" \\
+  -H "x-opencode-session: session-pluely-main" \\
   -d '{
     "model": "{{MODEL}}",
     "messages": [{"role": "system", "content": "{{SYSTEM_PROMPT}}"}, {"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
